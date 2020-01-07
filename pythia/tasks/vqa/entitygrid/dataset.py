@@ -1,8 +1,10 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 import os
+import sys
 
 import torch
 import tqdm
+import numpy as np
 
 from pythia.common.sample import Sample
 from pythia.tasks.base_dataset import BaseDataset
@@ -11,10 +13,14 @@ from pythia.tasks.image_database import ImageDatabase
 from pythia.utils.distributed_utils import is_main_process
 from pythia.utils.general import get_pythia_root
 
+sys.path.append('/workspace/st_vqa_entitygrid/solution/')
+import dataset_utils
+
 
 class EntityGridDataset(BaseDataset):
     def __init__(self, dataset_type, imdb_file_index, config, *args, **kwargs):
         super().__init__("entitygrid", dataset_type, config)
+        #imdb train,val,test
         imdb_files = self.config.imdb_files
 
         if dataset_type not in imdb_files:
@@ -23,23 +29,32 @@ class EntityGridDataset(BaseDataset):
                 "imdb_files of dataset config".format(dataset_type)
             )
 
+        #imdb file index = 0 --> train
         self.imdb_file = imdb_files[dataset_type][imdb_file_index]
+        #image metadata for train
         self.imdb_file = self._get_absolute_path(self.imdb_file)
         self.imdb = ImageDatabase(self.imdb_file)
 
+        #empty
         self.kwargs = kwargs
+        #False
         self.image_depth_first = self.config.image_depth_first
+        #False
         self._should_fast_read = self.config.fast_read
 
+        #False
         self.use_ocr = self.config.use_ocr
+        #False
         self.use_ocr_info = self.config.use_ocr_info
 
         self._use_features = False
+        #True
         if hasattr(self.config, "image_features"):
             self._use_features = True
+            #137
             self.features_max_len = self.config.features_max_len
             self._return_info = self.config.get("return_info", True)
-
+            #detectron_path and resnet_path
             all_image_feature_dirs = self.config.image_features[dataset_type]
             curr_image_features_dir = all_image_feature_dirs[imdb_file_index]
             curr_image_features_dir = curr_image_features_dir.split(",")
@@ -97,12 +112,12 @@ class EntityGridDataset(BaseDataset):
     def load_item(self, idx):
         sample_info = self.imdb[idx]
         current_sample = Sample()
-
+        
         if "question_tokens" in sample_info:
             text_processor_argument = {"tokens": sample_info["question_tokens"]}
         else:
             text_processor_argument = {"text": sample_info["question"]}
-
+        
         processed_question = self.text_processor(text_processor_argument)
 
         current_sample.text = processed_question["text"]
@@ -120,18 +135,84 @@ class EntityGridDataset(BaseDataset):
         current_sample.text_len = torch.tensor(
             len(sample_info["question_tokens"]), dtype=torch.int
         )
+        #Here add our own feature_grid
+        image_id = sample_info["image_id"]
+        #TODO: add dataset_type (train,test,val)
+        img_feat_dic_path = os.path.join(
+            self.config.entitygrid_img_features.train[0],
+            image_id + self.config.img_feature.suffix
+        )
+        ocr_feat_dic_path = os.path.join(
+            self.config.entitygrid_ocr_features.train[0],
+            image_id + self.config.ocr_feature.suffix
+        )
 
-        if self._use_features is True:
-            features = self.features_db[idx]
-            current_sample.update(features)
+
+        #Load Image Feature Canvas
+        img_feat_canvas = self.prepare_img_grid_from_file(
+            img_feat_dic_path,self.config.img_feature.vector_size
+        )
+
+        #Load OCR Feature Canvas
+        ocr_feat_canvas = self.prepare_img_grid_from_file(
+            ocr_feat_dic_path,self.config.ocr_feature.vector_size
+        )
+
+        #Reshape Tensor
+        img_feat_canvas = img_feat_canvas.permute(2,0,1)
+        ocr_feat_canvas = ocr_feat_canvas.permute(2,0,1)
+        
+        #Add canvas to sample
+        current_sample.img_feat_canvas = img_feat_canvas
+        current_sample.ocr_feat_canvas = ocr_feat_canvas
+
+        #if self._use_features is True:
+        #    features = self.features_db[idx]
+        #    current_sample.update(features)
 
         # Add details for OCR like OCR bbox, vectors, tokens here
-        current_sample = self.add_ocr_details(sample_info, current_sample)
+        #current_sample = self.add_ocr_details(sample_info, current_sample)
         # Depending on whether we are using soft copy this can add
         # dynamic answer space
-        current_sample = self.add_answer_info(sample_info, current_sample)
+        #current_sample = self.add_answer_info(sample_info, current_sample)
 
         return current_sample
+
+    def init_feature_grid(self,index_canvas,index2feature,vector_size):
+        
+        #Create empty result feature_grid
+        ind_canv_shape = index_canvas.shape
+        #vector_size = index2feature[1].shape[0]
+        feature_grid = torch.zeros((ind_canv_shape[0],ind_canv_shape[1],vector_size))
+        
+        #feature indices set
+        feature_indices = index2feature.keys()
+        
+        #replace indices by feature vector
+        for feature_index in feature_indices:
+            feature_grid[index_canvas == feature_index] = torch.from_numpy(
+                index2feature[feature_index]
+            )
+            
+        return feature_grid
+
+    def prepare_img_grid_from_file(self,file_path,vector_size):
+        #Load image entitygrid
+        canvas_dic = dataset_utils.load_dic(file_path)
+        feature_grid = self.prepare_img_grid(canvas_dic,vector_size)
+
+        return feature_grid
+
+    def prepare_img_grid(self,canvas_dic,vector_size):
+        
+        #replace indices by feature values
+        index_canvas = canvas_dic["resized_index_canvas"]
+        index2feature = canvas_dic["index2feature"]
+        
+        feature_grid = self.init_feature_grid(
+            index_canvas,index2feature,vector_size)
+        
+        return feature_grid
 
     def add_ocr_details(self, sample_info, sample):
         if self.use_ocr:

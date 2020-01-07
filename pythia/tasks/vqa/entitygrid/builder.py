@@ -24,10 +24,12 @@ class EntityGridDataBuilder(BaseDatasetBuilder):
     def _load(self, dataset_type, config, *args, **kwargs):
         self.config = config
 
-        image_features = config["image_features"]["train"][0].split(",")
-        self.num_image_features = len(image_features)
+        #detectron/train and restnet/train
+        #--> data/updated_img_feat_canvas and data/updated_ocr_feat_canvas
+        #image_features = config["image_features"]["train"][0].split(",")
+        #self.num_image_features = len(image_features)
 
-        registry.register("num_image_features", self.num_image_features)
+        #registry.register("num_image_features", self.num_image_features)
 
         self.dataset = self.prepare_data_set(dataset_type, config)
 
@@ -67,6 +69,7 @@ class EntityGridDataBuilder(BaseDatasetBuilder):
         self.dataset_class = cls
 
     def prepare_data_set(self, dataset_type, config):
+        #let loading og imdb_files
         if dataset_type not in config.imdb_files:
             warnings.warn(
                 "Dataset type {} is not present in "
