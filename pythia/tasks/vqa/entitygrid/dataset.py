@@ -42,7 +42,7 @@ class EntityGridDataset(BaseDataset):
         #False
         self._should_fast_read = self.config.fast_read
 
-        #False
+        #True
         self.use_ocr = self.config.use_ocr
         #False
         self.use_ocr_info = self.config.use_ocr_info
@@ -171,10 +171,10 @@ class EntityGridDataset(BaseDataset):
         #    current_sample.update(features)
 
         # Add details for OCR like OCR bbox, vectors, tokens here
-        #current_sample = self.add_ocr_details(sample_info, current_sample)
+        current_sample = self.add_ocr_details(sample_info, current_sample)
         # Depending on whether we are using soft copy this can add
         # dynamic answer space
-        #current_sample = self.add_answer_info(sample_info, current_sample)
+        current_sample = self.add_answer_info(sample_info, current_sample)
 
         return current_sample
 
@@ -225,13 +225,13 @@ class EntityGridDataset(BaseDataset):
             context = self.context_processor({"tokens": ocr_tokens})
             sample.context = context["text"]
             sample.context_tokens = context["tokens"]
-            sample.context_feature_0 = context["text"]
-            sample.context_info_0 = Sample()
-            sample.context_info_0.max_features = context["length"]
+            #sample.context_feature_0 = context["text"]
+            #sample.context_info_0 = Sample()
+            #sample.context_info_0.max_features = context["length"]
 
             order_vectors = torch.eye(len(sample.context_tokens))
             order_vectors[context["length"] :] = 0
-            sample.order_vectors = order_vectors
+            #sample.order_vectors = order_vectors
 
         if self.use_ocr_info and "ocr_info" in sample_info:
             sample.ocr_bbox = self.bbox_processor({"info": sample_info["ocr_info"]})[

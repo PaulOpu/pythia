@@ -78,12 +78,25 @@ class EntityGrid(Pythia):
         
 
     def forward(self, sample_list):
+        #sample list contains now also 
         sample_list.text = self.word_embedding(sample_list.text)
+        #(batch_size x 4096)
         text_embedding_total = self.process_text_embedding(sample_list)
+
+        #img_feat_canvas (batch_size x 2048 x 128 x 128)
+        #ocr_feat_canvas (batch_size x 300  x 128 x 128)
+
+        #sparse tensors are experimential
 
         #CNN
         img_emb = F.relu(self.batchnorm1(self.conv1(sample_list.img_feat_canvas)))
         ocr_emb = F.relu(self.batchnorm2(self.conv2(sample_list.ocr_feat_canvas)))
+
+        #back prop has to be applied, no deletion possible
+        #del sample_list["img_feat_canvas"]
+        #del sample_list["ocr_feat_canvas"]
+
+        #torch.cuda.empty_cache()
 
         joint_emb = torch.cat([img_emb,ocr_emb],1)
 
@@ -101,6 +114,9 @@ class EntityGrid(Pythia):
             F.relu(
                 self.batchnorm5(
                     self.conv5(joint_emb))))
+
+        #batch_size x channel x height x width
+
 
         #Flatten feature vector
         #TODO: get official batch size
