@@ -196,6 +196,7 @@ class EntityGridDataset(BaseDataset):
 
             feature_grid[index_canvas == feature_index] = torch.from_numpy(
                 feature_vector
+
             )
             
         return feature_grid
