@@ -13,7 +13,7 @@ class EntityGrid(Pythia):
     def __init__(self, config):
         super().__init__(config)
 
-        img_in_channels = 2048
+        """ img_in_channels = 2048
         ocr_in_channels = 300
         joint_in_channels = 512
         joint_middle_channels = 768
@@ -26,35 +26,35 @@ class EntityGrid(Pythia):
         padding = 0 
 
         pool_stride = 2
-        pool_kernel = 2
+        pool_kernel = 2 """
         #TODO: use nn.Sequential
 
         act_f = nn.ReLU()
 
         self.img_net = nn.Sequential(
-            nn.Conv2d(img_in_channels, out_channels, kernel_size, stride, padding),
-            nn.BatchNorm2d(out_channels),
+            nn.Conv2d(2048, 256, 3, 1, 0),
+            nn.BatchNorm2d(256),
             act_f
         )
 
         self.chargrid_net = nn.Sequential(
-            nn.Conv2d(ocr_in_channels, out_channels, kernel_size, stride, padding),
+            nn.Conv2d(300, 256, 3, 1, 0),
             nn.BatchNorm2d(out_channels),
             act_f
         )
 
         self.entitygrid_net = nn.Sequential(
-            nn.Conv2d(joint_in_channels, joint_in_channels, kernel_size, stride, padding),
-            nn.BatchNorm2d(joint_in_channels),
+            nn.Conv2d(512, 512, 3, 1, 0),
+            nn.BatchNorm2d(512),
             act_f,
-            nn.MaxPool2d(pool_kernel, stride=pool_stride),
-            nn.Conv2d(joint_in_channels, joint_middle_channels, kernel_size, stride, padding),
-            nn.BatchNorm2d(joint_middle_channels),
+            nn.MaxPool2d(2, stride=2),
+            nn.Conv2d(512, 768, 3, 1, 0),
+            nn.BatchNorm2d(768),
             act_f,
-            nn.MaxPool2d(pool_kernel, stride=pool_stride),
-            nn.Conv2d(joint_middle_channels, joint_out_channels, kernel_size, stride, padding),
-            nn.BatchNorm2d(joint_out_channels),
-            nn.MaxPool2d(pool_kernel, stride=pool_stride)
+            nn.MaxPool2d(2, stride=2),
+            nn.Conv2d(768, 1024, 3, 1, 0),
+            nn.BatchNorm2d(1024),
+            nn.MaxPool2d(2, stride=2)
         )
 
 
