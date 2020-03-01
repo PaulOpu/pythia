@@ -58,7 +58,7 @@ class EntityGrid(Pythia):
         )
 
 
-        #Image CNN
+      """   #Image CNN
         self.conv1 = nn.Conv2d(img_in_channels, out_channels, kernel_size, stride, padding)
         self.batchnorm1 = nn.BatchNorm2d(out_channels)
         #OCR CNN
@@ -76,7 +76,7 @@ class EntityGrid(Pythia):
 
         self.conv5 = nn.Conv2d(joint_middle_channels, joint_out_channels, kernel_size, stride, padding)
         self.batchnorm5 = nn.BatchNorm2d(joint_out_channels)
-        self.max_pool2d5 = nn.MaxPool2d(pool_kernel, stride=pool_stride)
+        self.max_pool2d5 = nn.MaxPool2d(pool_kernel, stride=pool_stride) """
 
     def build(self):
         self._init_text_embeddings("text")
