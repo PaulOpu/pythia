@@ -13,6 +13,8 @@ from pythia.tasks.image_database import ImageDatabase
 from pythia.utils.distributed_utils import is_main_process
 from pythia.utils.general import get_pythia_root
 
+from sklearn.preprocessing import normalize
+
 sys.path.append('/workspace/st_vqa_entitygrid/solution/')
 import dataset_utils
 
@@ -192,9 +194,10 @@ class EntityGridDataset(BaseDataset):
         for feature_index in feature_indices:
             #Normalize index2feature[feature_index]
             feature_vector = index2feature[feature_index]
-            feature_vector = feature_vector / np.linalg.norm(feature_vector)
+            feature_vector = normalize(feature_vector[:,np.newaxis], axis=0).ravel()
+            #feature_vector = feature_vector / np.linalg.norm(feature_vector)
 
-            feature_grid[index_canvas == feature_index] = torch.from_numpy(
+            feature_grid[index_canvas == feature_index] = torch.tensor(
                 feature_vector
 
             )
@@ -230,13 +233,13 @@ class EntityGridDataset(BaseDataset):
             context = self.context_processor({"tokens": ocr_tokens})
             sample.context = context["text"]
             sample.context_tokens = context["tokens"]
-            #sample.context_feature_0 = context["text"]
-            #sample.context_info_0 = Sample()
-            #sample.context_info_0.max_features = context["length"]
+            sample.context_feature_0 = context["text"]
+            sample.context_info_0 = Sample()
+            sample.context_info_0.max_features = context["length"]
 
             order_vectors = torch.eye(len(sample.context_tokens))
             order_vectors[context["length"] :] = 0
-            #sample.order_vectors = order_vectors
+            sample.order_vectors = order_vectors
 
         if self.use_ocr_info and "ocr_info" in sample_info:
             sample.ocr_bbox = self.bbox_processor({"info": sample_info["ocr_info"]})[

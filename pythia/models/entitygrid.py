@@ -29,6 +29,35 @@ class EntityGrid(Pythia):
         pool_kernel = 2
         #TODO: use nn.Sequential
 
+        act_f = nn.ReLU()
+
+        self.img_net = nn.Sequential(
+            nn.Conv2d(img_in_channels, out_channels, kernel_size, stride, padding),
+            nn.BatchNorm2d(out_channels),
+            act_f
+        )
+
+        self.chargrid_net = nn.Sequential(
+            nn.Conv2d(ocr_in_channels, out_channels, kernel_size, stride, padding),
+            nn.BatchNorm2d(out_channels),
+            act_f
+        )
+
+        self.entitygrid_net = nn.Sequential(
+            nn.Conv2d(joint_in_channels, joint_in_channels, kernel_size, stride, padding),
+            nn.BatchNorm2d(joint_in_channels),
+            act_f,
+            nn.MaxPool2d(pool_kernel, stride=pool_stride),
+            nn.Conv2d(joint_in_channels, joint_middle_channels, kernel_size, stride, padding),
+            nn.BatchNorm2d(joint_middle_channels),
+            act_f,
+            nn.MaxPool2d(pool_kernel, stride=pool_stride),
+            nn.Conv2d(joint_middle_channels, joint_out_channels, kernel_size, stride, padding),
+            nn.BatchNorm2d(joint_out_channels),
+            nn.MaxPool2d(pool_kernel, stride=pool_stride)
+        )
+
+
         #Image CNN
         self.conv1 = nn.Conv2d(img_in_channels, out_channels, kernel_size, stride, padding)
         self.batchnorm1 = nn.BatchNorm2d(out_channels)
@@ -74,7 +103,7 @@ class EntityGrid(Pythia):
         # Now, the classifier's input will be cat of image and context based
         # features
         #return 2 * super()._get_classifier_input_dim()
-        return super()._get_classifier_input_dim()
+        return 2 * super()._get_classifier_input_dim()
         
 
     def forward(self, sample_list):
@@ -89,18 +118,22 @@ class EntityGrid(Pythia):
         #sparse tensors are experimential
 
         #CNN
-        img_emb = F.relu(self.batchnorm1(self.conv1(sample_list.img_feat_canvas)))
-        ocr_emb = F.relu(self.batchnorm2(self.conv2(sample_list.ocr_feat_canvas)))
-
+        #img_emb = F.relu(self.batchnorm1(self.conv1(sample_list.img_feat_canvas)))
+        #ocr_emb = F.relu(self.batchnorm2(self.conv2(sample_list.ocr_feat_canvas)))
+        img_emb = self.img_net(sample_list.img_feat_canvas)
+        ocr_emb = self.chargrid_net(sample_list.ocr_feat_canvas)
         #back prop has to be applied, no deletion possible
         #del sample_list["img_feat_canvas"]
         #del sample_list["ocr_feat_canvas"]
 
         #torch.cuda.empty_cache()
 
-        joint_emb = torch.cat([img_emb,ocr_emb],1)
+        
 
-        joint_emb = self.max_pool2d3(
+        joint_emb = torch.cat([img_emb,ocr_emb],1)
+        joint_emb = self.entitygrid_net(joint_emb)
+
+        """ joint_emb = self.max_pool2d3(
             F.relu(
                 self.batchnorm3(
                     self.conv3(joint_emb))))
@@ -114,7 +147,7 @@ class EntityGrid(Pythia):
             F.relu(
                 self.batchnorm5(
                     self.conv5(joint_emb))))
-
+ """
         #batch_size x channel x height x width
 
 
@@ -122,7 +155,7 @@ class EntityGrid(Pythia):
         #TODO: get official batch size
         batch_size = joint_emb.shape[0]
         feature_vector_size = joint_emb.shape[1]
-        
+        #print(joint_emb.shape)
         joint_emb = joint_emb.view((batch_size,feature_vector_size,-1))
         joint_emb = joint_emb.permute(0,2,1)
 
@@ -141,16 +174,16 @@ class EntityGrid(Pythia):
             "image", sample_list, text_embedding_total
         )
 
-        #context_embedding_total, _ = self.process_feature_embedding(
-        #    "context", sample_list, text_embedding_total, ["order_vectors"]
-        #)
+        context_embedding_total, _ = self.process_feature_embedding(
+            "context", sample_list, text_embedding_total, ["order_vectors"]
+        )
 
-        #if self.inter_model is not None:
-        #    image_embedding_total = self.inter_model(image_embedding_total)
+        if self.inter_model is not None:
+            image_embedding_total = self.inter_model(image_embedding_total)
 
         joint_embedding = self.combine_embeddings(
             ["image","text"],
-            [image_embedding_total, text_embedding_total, None],
+            [image_embedding_total, text_embedding_total, context_embedding_total],
         )
 
         scores = self.calculate_logits(joint_embedding)
