@@ -137,6 +137,8 @@ class EntityGridDataset(BaseDataset):
         current_sample.text_len = torch.tensor(
             len(sample_info["question_tokens"]), dtype=torch.int
         )
+
+
         #Here add our own feature_grid
         image_id = sample_info["image_id"]
         #TODO: add dataset_type (train,test,val)
@@ -151,9 +153,9 @@ class EntityGridDataset(BaseDataset):
 
 
         #Load Image Feature Canvas
-        img_feat_canvas = self.prepare_img_grid_from_file(
-            img_feat_dic_path,self.config.img_feature.vector_size
-        )
+        #img_feat_canvas = self.prepare_img_grid_from_file(
+        #    img_feat_dic_path,self.config.img_feature.vector_size
+        #)
 
         #Load OCR Feature Canvas
         ocr_feat_canvas = self.prepare_img_grid_from_file(
@@ -161,16 +163,16 @@ class EntityGridDataset(BaseDataset):
         )
 
         #Reshape Tensor
-        img_feat_canvas = img_feat_canvas.permute(2,0,1)
+        #img_feat_canvas = img_feat_canvas.permute(2,0,1)
         ocr_feat_canvas = ocr_feat_canvas.permute(2,0,1)
         
         #Add canvas to sample
-        current_sample.img_feat_canvas = img_feat_canvas
+        #current_sample.img_feat_canvas = img_feat_canvas
         current_sample.ocr_feat_canvas = ocr_feat_canvas
 
-        #if self._use_features is True:
-        #    features = self.features_db[idx]
-        #    current_sample.update(features)
+        if self._use_features is True:
+            features = self.features_db[idx]
+            current_sample.update(features)
 
         # Add details for OCR like OCR bbox, vectors, tokens here
         current_sample = self.add_ocr_details(sample_info, current_sample)

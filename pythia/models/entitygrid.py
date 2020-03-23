@@ -7,6 +7,8 @@ from pythia.common.registry import registry
 from pythia.models.pythia import Pythia
 from pythia.modules.layers import ClassifierLayer
 
+from torchvision.models.resnet import Bottleneck
+
 
 @registry.register_model("entitygrid_model")
 class EntityGrid(Pythia):
@@ -26,12 +28,61 @@ class EntityGrid(Pythia):
         padding = 0 
 
         pool_stride = 2
-        pool_kernel = 2 """
-        #TODO: use nn.Sequential
+        pool_kernel = 2
+
+        #Image CNN
+        self.conv1 = nn.Conv2d(img_in_channels, out_channels, kernel_size, stride, padding)
+        self.batchnorm1 = nn.BatchNorm2d(out_channels)
+        #OCR CNN
+        self.conv2 = nn.Conv2d(ocr_in_channels, out_channels, kernel_size, stride, padding)
+        self.batchnorm2 = nn.BatchNorm2d(out_channels)
+
+        #Joint CNNs
+        self.conv3 = nn.Conv2d(joint_in_channels, joint_in_channels, kernel_size, stride, padding)
+        self.batchnorm3 = nn.BatchNorm2d(joint_in_channels)
+        self.max_pool2d3 = nn.MaxPool2d(pool_kernel, stride=pool_stride)
+
+        self.conv4 = nn.Conv2d(joint_in_channels, joint_middle_channels, kernel_size, stride, padding)
+        self.batchnorm4 = nn.BatchNorm2d(joint_middle_channels)
+        self.max_pool2d4 = nn.MaxPool2d(pool_kernel, stride=pool_stride)
+
+        self.conv5 = nn.Conv2d(joint_middle_channels, joint_out_channels, kernel_size, stride, padding)
+        self.batchnorm5 = nn.BatchNorm2d(joint_out_channels)
+        self.max_pool2d5 = nn.MaxPool2d(pool_kernel, stride=pool_stride) """
 
         act_f = nn.ReLU()
 
-        self.img_net = nn.Sequential(
+        # self.img_net = nn.Sequential(
+        #     nn.Conv2d(2048, 2048, 3, 2, 1),
+        #     nn.BatchNorm2d(2048),
+        #     act_f,
+        #     nn.Conv2d(2048, 2048, 3, 2, 1),
+        #     nn.BatchNorm2d(2048),
+        #     act_f
+        # )
+
+        self.chargrid_net = nn.Sequential(
+            nn.Conv2d(300, 512, 3, 2, 1),
+            nn.BatchNorm2d(512),
+            act_f,
+            nn.Conv2d(512, 1024, 3, 2, 1),
+            nn.BatchNorm2d(1024),
+            act_f
+        )
+
+        downsample = nn.Sequential(
+            nn.Conv2d(1024, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False),
+            nn.BatchNorm2d(2048)
+        )
+        self.entitygrid_net = nn.Sequential(
+            Bottleneck(1024, 512, stride=1, downsample=downsample),
+            nn.Conv2d(2048, 2048, 3, 2, 1),
+            nn.BatchNorm2d(2048),
+            act_f
+        )
+
+
+        """ self.img_net = nn.Sequential(
             nn.Conv2d(2048, 256, 3, 1, 0),
             nn.BatchNorm2d(256),
             act_f
@@ -55,28 +106,10 @@ class EntityGrid(Pythia):
             nn.Conv2d(768, 1024, 3, 1, 0),
             nn.BatchNorm2d(1024),
             nn.MaxPool2d(2, stride=2)
-        )
+        ) """
 
 
-      """   #Image CNN
-        self.conv1 = nn.Conv2d(img_in_channels, out_channels, kernel_size, stride, padding)
-        self.batchnorm1 = nn.BatchNorm2d(out_channels)
-        #OCR CNN
-        self.conv2 = nn.Conv2d(ocr_in_channels, out_channels, kernel_size, stride, padding)
-        self.batchnorm2 = nn.BatchNorm2d(out_channels)
 
-        #Joint CNNs
-        self.conv3 = nn.Conv2d(joint_in_channels, joint_in_channels, kernel_size, stride, padding)
-        self.batchnorm3 = nn.BatchNorm2d(joint_in_channels)
-        self.max_pool2d3 = nn.MaxPool2d(pool_kernel, stride=pool_stride)
-
-        self.conv4 = nn.Conv2d(joint_in_channels, joint_middle_channels, kernel_size, stride, padding)
-        self.batchnorm4 = nn.BatchNorm2d(joint_middle_channels)
-        self.max_pool2d4 = nn.MaxPool2d(pool_kernel, stride=pool_stride)
-
-        self.conv5 = nn.Conv2d(joint_middle_channels, joint_out_channels, kernel_size, stride, padding)
-        self.batchnorm5 = nn.BatchNorm2d(joint_out_channels)
-        self.max_pool2d5 = nn.MaxPool2d(pool_kernel, stride=pool_stride) """
 
     def build(self):
         self._init_text_embeddings("text")
@@ -95,6 +128,10 @@ class EntityGrid(Pythia):
             {"params": self.context_feature_embeddings_list.parameters()},
             {"params": self.context_embeddings.parameters()},
             {"params": self.context_feature_encoders.parameters()},
+            #{"params": self.img_net.parameters()},
+            {"params": self.chargrid_net.parameters()},
+            {"params": self.entitygrid_net.parameters()},
+
         ]
 
         return params
@@ -118,9 +155,7 @@ class EntityGrid(Pythia):
         #sparse tensors are experimential
 
         #CNN
-        #img_emb = F.relu(self.batchnorm1(self.conv1(sample_list.img_feat_canvas)))
-        #ocr_emb = F.relu(self.batchnorm2(self.conv2(sample_list.ocr_feat_canvas)))
-        img_emb = self.img_net(sample_list.img_feat_canvas)
+        #img_emb = self.img_net(sample_list.img_feat_canvas)
         ocr_emb = self.chargrid_net(sample_list.ocr_feat_canvas)
         #back prop has to be applied, no deletion possible
         #del sample_list["img_feat_canvas"]
@@ -128,47 +163,30 @@ class EntityGrid(Pythia):
 
         #torch.cuda.empty_cache()
 
+        #joint_emb = torch.cat([img_emb,ocr_emb],1)
+        #joint_emb = self.entitygrid_net(joint_emb)
+        joint_emb = self.entitygrid_net(ocr_emb)
         
-
-        joint_emb = torch.cat([img_emb,ocr_emb],1)
-        joint_emb = self.entitygrid_net(joint_emb)
-
-        """ joint_emb = self.max_pool2d3(
-            F.relu(
-                self.batchnorm3(
-                    self.conv3(joint_emb))))
-
-        joint_emb = self.max_pool2d4(
-            F.relu(
-                self.batchnorm4(
-                    self.conv4(joint_emb))))
-
-        joint_emb = self.max_pool2d5(
-            F.relu(
-                self.batchnorm5(
-                    self.conv5(joint_emb))))
- """
         #batch_size x channel x height x width
 
 
         #Flatten feature vector
         #TODO: get official batch size
-        batch_size = joint_emb.shape[0]
-        feature_vector_size = joint_emb.shape[1]
+        batch_size,feature_vector_size,height,width = joint_emb.shape
+
         #print(joint_emb.shape)
         joint_emb = joint_emb.view((batch_size,feature_vector_size,-1))
         joint_emb = joint_emb.permute(0,2,1)
 
         #Add feature embeddings to sample_list
-        setattr(sample_list,"image_feature_0",joint_emb)
+        setattr(sample_list,"image_feature_2",joint_emb)
         
         #TODO: use max features from config
         #max features 
         feature_dim = torch.zeros((batch_size),dtype=torch.int64)
-        feature_dim[:] = 196
+        feature_dim[:] = height*width
         feature_info = MaxFeatureClass(feature_dim)
-        
-        setattr(sample_list,"image_info_0",feature_info)
+        setattr(sample_list,"image_info_2",feature_info)
 
         image_embedding_total, _ = self.process_feature_embedding(
             "image", sample_list, text_embedding_total
